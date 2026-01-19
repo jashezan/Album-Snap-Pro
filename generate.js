@@ -18,8 +18,17 @@ window.onload = async function () {
     const formatBytes = (bytes) => {
         if (!+bytes) return '0 B';
         const k = 1024;
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${['B', 'KB', 'MB'][i]}`;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+    };
+
+    // Reset modal to default state
+    const resetModal = () => {
+        ui.pFill.style.width = '0%';
+        ui.pFill.style.background = '#3b82f6';
+        ui.sTitle.innerText = 'Processing...';
+        ui.sDesc.innerText = 'Initializing...';
     };
 
     // === 3. Data Initialization ===
@@ -211,6 +220,8 @@ window.onload = async function () {
             }
 
             // B. Init UI
+            resetModal();
+            ui.sTitle.innerText = 'Generating PDF';
             ui.overlay.style.display = 'flex';
 
             // Validate Library
@@ -290,10 +301,9 @@ window.onload = async function () {
             }
 
             // B. Init UI
+            resetModal();
+            ui.sTitle.innerText = 'Creating ZIP';
             ui.overlay.style.display = 'flex';
-            ui.sTitle.innerText = "Creating ZIP";
-            ui.pFill.style.background = "#3b82f6";
-            ui.pFill.style.width = "0%";
 
             // Validate Library
             if (typeof JSZip === 'undefined') {

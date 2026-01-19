@@ -146,7 +146,7 @@
             const u = new URL(url);
             // Keep the path as the main identifier, ignore varying CDN params
             return u.pathname;
-        } catch { return url; }
+        } catch (e) { return url; }
     };
 
     const urlToBase64 = async (url) => {
