@@ -1,4 +1,4 @@
-(async function() {
+(async function () {
     if (window.fbScraperRunning) return;
     window.fbScraperRunning = true;
 
@@ -99,8 +99,8 @@
     const previewImg = document.getElementById('fb-preview');
     const updateUI = (msg, count, lastImgData) => {
         document.getElementById('fb-status').innerText = msg;
-        if(count !== undefined) document.getElementById('fb-count').innerText = count;
-        
+        if (count !== undefined) document.getElementById('fb-count').innerText = count;
+
         if (lastImgData) {
             previewImg.src = lastImgData;
         }
@@ -116,8 +116,12 @@
     // === LOGIC ===
     const delay = ms => new Promise(r => setTimeout(r, ms));
     const seenFbids = new Set();
+    const seenImageUrls = new Set(); // Track actual image URLs for duplicate detection
     const capturedImages = [];
     let startFbid = null;
+    let lastImageUrl = null;
+    let consecutiveDuplicateCount = 0;
+    const MAX_CONSECUTIVE_DUPLICATES = 3; // If same image appears 3x in a row, we've looped
 
     const getCurrentFbid = () => new URLSearchParams(window.location.search).get("fbid");
     const getNextButton = () => document.querySelector('div[aria-label="Next photo"]') || document.querySelector('div[aria-label="Next"]');
@@ -130,10 +134,19 @@
         let bestImg = null, minDist = Infinity;
         for (const img of contentImages) {
             const rect = img.getBoundingClientRect();
-            const dist = Math.hypot((rect.left + rect.width/2) - centerX, (rect.top + rect.height/2) - centerY);
+            const dist = Math.hypot((rect.left + rect.width / 2) - centerX, (rect.top + rect.height / 2) - centerY);
             if (dist < minDist) { minDist = dist; bestImg = img; }
         }
         return bestImg;
+    };
+
+    // Extract a normalized URL for comparison (strips query params that might change)
+    const normalizeImageUrl = (url) => {
+        try {
+            const u = new URL(url);
+            // Keep the path as the main identifier, ignore varying CDN params
+            return u.pathname;
+        } catch { return url; }
     };
 
     const urlToBase64 = async (url) => {
@@ -155,35 +168,84 @@
 
     while (isScanning) {
         loopSafety++;
-        if (loopSafety > 1000) break;
+        if (loopSafety > 1000) {
+            updateUI("Safety limit reached", capturedImages.length);
+            break;
+        }
 
         const fbid = getCurrentFbid();
-        if (startFbid && fbid === startFbid && capturedImages.length > 0) break;
+
+        // Check if we've looped back to the start (fbid-based detection)
+        if (startFbid && fbid === startFbid && capturedImages.length > 0) {
+            updateUI("Loop detected (start reached)", capturedImages.length);
+            break;
+        }
         if (!startFbid && fbid) startFbid = fbid;
 
-        if (fbid && !seenFbids.has(fbid)) {
-            const imgEl = getActiveImage();
-            if (imgEl && imgEl.src) {
+        const imgEl = getActiveImage();
+        if (imgEl && imgEl.src) {
+            const normalizedUrl = normalizeImageUrl(imgEl.src);
+
+            // Check for consecutive duplicates (loop detection)
+            if (normalizedUrl === lastImageUrl) {
+                consecutiveDuplicateCount++;
+                if (consecutiveDuplicateCount >= MAX_CONSECUTIVE_DUPLICATES) {
+                    updateUI("Loop detected (same image)", capturedImages.length);
+                    break;
+                }
+            } else {
+                consecutiveDuplicateCount = 0;
+                lastImageUrl = normalizedUrl;
+            }
+
+            // Only capture if we haven't seen this image before
+            if (!seenImageUrls.has(normalizedUrl)) {
                 updateUI("Fetching High-Res...", capturedImages.length);
-                
+
                 const base64Data = await urlToBase64(imgEl.src);
                 if (base64Data) {
-                    seenFbids.add(fbid);
+                    seenImageUrls.add(normalizedUrl);
+                    if (fbid) seenFbids.add(fbid);
                     capturedImages.push({ data: base64Data, w: imgEl.naturalWidth, h: imgEl.naturalHeight });
                     updateUI("Processing...", capturedImages.length, base64Data);
                 }
             }
         }
 
+        // Check for "Next" button - if missing, we've reached the end
         const nextBtn = getNextButton();
-        if (!nextBtn) break;
+        if (!nextBtn) {
+            updateUI("End of album reached", capturedImages.length);
+            break;
+        }
         nextBtn.click();
 
-        let changed = false;
-        for (let i = 0; i < 10; i++) {
-            await delay(400);
-            if (getCurrentFbid() !== fbid) { changed = true; break; }
-            if (i === 4 && isScanning) nextBtn.click();
+        // Wait for navigation with timeout
+        let navigated = false;
+        const prevFbid = fbid;
+        const prevImgUrl = imgEl ? normalizeImageUrl(imgEl.src) : null;
+
+        for (let i = 0; i < 15; i++) {
+            await delay(300);
+
+            const newFbid = getCurrentFbid();
+            const newImgEl = getActiveImage();
+            const newImgUrl = newImgEl ? normalizeImageUrl(newImgEl.src) : null;
+
+            // Check if either fbid or image URL changed
+            if (newFbid !== prevFbid || (newImgUrl && newImgUrl !== prevImgUrl)) {
+                navigated = true;
+                break;
+            }
+
+            // Retry click after some attempts
+            if (i === 5 && isScanning) nextBtn.click();
+        }
+
+        // If navigation didn't happen after all retries, we've likely reached the end
+        if (!navigated) {
+            updateUI("Navigation stalled - end of album", capturedImages.length);
+            break;
         }
     }
 
@@ -192,11 +254,11 @@
     document.querySelector('.scanner-overlay').style.display = 'none';
     document.querySelector('.status-badge').style.background = '#374151';
     document.querySelector('.status-badge').innerText = "COMPLETE";
-    
+
     await chrome.storage.local.set({ "fb_pdf_data": capturedImages });
-    
+
     updateUI("Launching Dashboard...", capturedImages.length);
-    try { await chrome.runtime.sendMessage({ action: "open_generator" }); } catch (e) {}
-    
+    try { await chrome.runtime.sendMessage({ action: "open_generator" }); } catch (e) { }
+
     setTimeout(() => { gui.remove(); window.fbScraperRunning = false; }, 2000);
 })();
