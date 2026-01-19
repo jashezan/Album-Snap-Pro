@@ -5,6 +5,7 @@ window.onload = async function () {
         countStr: document.getElementById('countStr'),
         sizeStr: document.getElementById('sizeStr'),
         btnExport: document.getElementById('btnExport'),
+        btnZip: document.getElementById('btnZip'),
         btnSelectAll: document.getElementById('btnSelectAll'),
         btnInvert: document.getElementById('btnInvert'),
         overlay: document.getElementById('overlay'),
@@ -159,13 +160,11 @@ window.onload = async function () {
         ui.countStr.innerText = `${selected.length}/${cards.length}`;
         ui.sizeStr.innerText = formatBytes(totalSize);
 
-        if (selected.length === 0) {
-            ui.btnExport.disabled = true;
-            ui.btnExport.style.opacity = 0.5;
-        } else {
-            ui.btnExport.disabled = false;
-            ui.btnExport.style.opacity = 1;
-        }
+        const disabled = selected.length === 0;
+        ui.btnExport.disabled = disabled;
+        ui.btnExport.style.opacity = disabled ? 0.5 : 1;
+        ui.btnZip.disabled = disabled;
+        ui.btnZip.style.opacity = disabled ? 0.5 : 1;
     }
 
     // === 7. Toolbar ===
@@ -266,6 +265,97 @@ window.onload = async function () {
         } catch (error) {
             console.error(error);
             alert("PDF Generation Error: " + error.message);
+            ui.overlay.style.display = 'none';
+        }
+    };
+
+    // === 9. ZIP Export Logic ===
+    ui.btnZip.onclick = async () => {
+        try {
+            // A. Get Data
+            const cards = Array.from(ui.grid.children).filter(c => !c.classList.contains('ghost-card'));
+            const finalImages = [];
+
+            cards.forEach(c => {
+                if (c.classList.contains('selected')) {
+                    const id = c.dataset.id;
+                    const imgData = images.find(i => i.id === id);
+                    if (imgData) finalImages.push(imgData);
+                }
+            });
+
+            if (finalImages.length === 0) {
+                alert("Please select at least one image.");
+                return;
+            }
+
+            // B. Init UI
+            ui.overlay.style.display = 'flex';
+            ui.sTitle.innerText = "Creating ZIP";
+            ui.pFill.style.background = "#3b82f6";
+            ui.pFill.style.width = "0%";
+
+            // Validate Library
+            if (typeof JSZip === 'undefined') {
+                throw new Error("JSZip library not loaded.");
+            }
+
+            // C. Create ZIP
+            const zip = new JSZip();
+
+            for (let i = 0; i < finalImages.length; i++) {
+                const img = finalImages[i];
+
+                // Update Progress
+                const pct = Math.round(((i + 1) / finalImages.length) * 100);
+                ui.pFill.style.width = `${pct}%`;
+                ui.sDesc.innerText = `Adding image ${i + 1} of ${finalImages.length}`;
+
+                // Force Repaint
+                await new Promise(r => setTimeout(r, 10));
+
+                // Convert base64 to binary
+                const base64Data = img.data.split(',')[1];
+                const extension = img.data.includes('image/png') ? 'png' : 'jpg';
+                const fileName = `image_${String(i + 1).padStart(3, '0')}.${extension}`;
+
+                zip.file(fileName, base64Data, { base64: true });
+            }
+
+            // D. Generate and Save
+            ui.sDesc.innerText = "Compressing files...";
+            await new Promise(r => setTimeout(r, 100));
+
+            const blob = await zip.generateAsync({
+                type: 'blob',
+                compression: 'DEFLATE',
+                compressionOptions: { level: 6 }
+            }, (metadata) => {
+                ui.pFill.style.width = `${Math.round(metadata.percent)}%`;
+            });
+
+            ui.sTitle.innerText = "Done!";
+            ui.sDesc.innerText = "Downloading ZIP...";
+            ui.pFill.style.background = "#10b981"; // Success green
+
+            await new Promise(r => setTimeout(r, 800));
+
+            // Create download link
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const downloadUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `Facebook_Album_${timestamp}.zip`;
+            link.click();
+            URL.revokeObjectURL(downloadUrl);
+
+            ui.sDesc.innerText = "Closing studio...";
+            chrome.storage.local.remove("fb_pdf_data");
+            setTimeout(() => window.close(), 2000);
+
+        } catch (error) {
+            console.error(error);
+            alert("ZIP Generation Error: " + error.message);
             ui.overlay.style.display = 'none';
         }
     };

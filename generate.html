@@ -124,6 +124,27 @@
             color: var(--text-main);
         }
 
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-body);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-secondary:disabled {
+            background: #f1f5f9;
+            color: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
         .btn-primary {
             background: var(--primary);
             color: white;
@@ -379,6 +400,7 @@
         }
     </style>
     <script src="jspdf.js"></script>
+    <script src="jszip.js"></script>
 </head>
 
 <body>
@@ -398,6 +420,7 @@
         <div class="actions">
             <button class="btn-ghost" id="btnSelectAll">Select All</button>
             <button class="btn-ghost" id="btnInvert">Invert</button>
+            <button class="btn-secondary" id="btnZip">📦 Download ZIP</button>
             <button class="btn-primary" id="btnExport">Generate PDF ➔</button>
         </div>
     </nav>
