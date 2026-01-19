@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "AlbumSnap",
+  "version": "1.0",
+  "description": "Capture Facebook album images in theater mode and save them as a beautiful PDF.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "*://*.facebook.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "48": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
