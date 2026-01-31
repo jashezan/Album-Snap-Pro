@@ -1,15 +1,13 @@
 document.getElementById("startBtn").addEventListener("click", async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
+
     if (tab.url.includes("facebook.com")) {
-        // Optional: Check if it's a photo URL to be helpful
-        // const isPhoto = tab.url.includes("/photo") || tab.url.includes("fbid=");
-        
-        chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            files: ["content.js"]
+        // Send message to background to duplicate tab and start capture
+        chrome.runtime.sendMessage({
+            action: "start_capture",
+            tabId: tab.id
         });
-        window.close(); 
+        window.close();
     } else {
         const btn = document.getElementById("startBtn");
         btn.innerText = "Go to Facebook First";
