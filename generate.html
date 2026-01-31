@@ -398,6 +398,54 @@
             font-size: 14px;
             font-family: monospace;
         }
+
+        /* --- 6. Rotation Controls --- */
+        .rotate-controls {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 5;
+        }
+
+        .card:hover .rotate-controls {
+            opacity: 1;
+        }
+
+        .rotate-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            padding: 0;
+        }
+
+        .rotate-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+            transform: scale(1.1);
+        }
+
+        .rotate-btn:active {
+            transform: scale(0.95);
+        }
+
+        .card-thumb.rotated {
+            transition: transform 0.3s ease;
+        }
     </style>
     <script src="jspdf.js"></script>
     <script src="jszip.js"></script>

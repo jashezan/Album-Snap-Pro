@@ -45,7 +45,8 @@ window.onload = async function () {
         id: `card_${idx}`,
         byteSize: Math.round((img.data.length * 0.75)),
         isLowRes: (img.w < 600 || img.h < 600),
-        aspect: img.w > img.h ? 'Landscape' : (img.w === img.h ? 'Square' : 'Portrait')
+        aspect: img.w > img.h ? 'Landscape' : (img.w === img.h ? 'Square' : 'Portrait'),
+        rotation: 0  // Rotation in degrees: 0, 90, 180, 270
     }));
 
     // === 4. Render Grid ===
@@ -66,7 +67,11 @@ window.onload = async function () {
             ${warningHTML}
             
             <div class="thumb-wrapper">
-                <img class="card-thumb" src="${img.data}" loading="lazy">
+                <img class="card-thumb rotated" src="${img.data}" loading="lazy" style="transform: rotate(${img.rotation}deg)">
+                <div class="rotate-controls">
+                    <button class="rotate-btn rotate-left" title="Rotate Left">↺</button>
+                    <button class="rotate-btn rotate-right" title="Rotate Right">↻</button>
+                </div>
             </div>
 
             <div class="meta">
@@ -75,16 +80,35 @@ window.onload = async function () {
             </div>
         `;
 
+        // Handle card selection click
         div.onclick = (e) => {
+            // Ignore clicks on rotate buttons
+            if (e.target.classList.contains('rotate-btn')) return;
+
             if (div.classList.contains('just-dragged')) {
                 div.classList.remove('just-dragged');
                 return;
             }
-            // Prevent deselecting when clicking specifically on drag areas if needed,
-            // but for now, clicking anywhere toggles state
             div.classList.toggle('selected');
             div.classList.toggle('excluded');
             updateStats();
+        };
+
+        // Handle rotation button clicks
+        const rotateLeft = div.querySelector('.rotate-left');
+        const rotateRight = div.querySelector('.rotate-right');
+        const thumbImg = div.querySelector('.card-thumb');
+
+        rotateLeft.onclick = (e) => {
+            e.stopPropagation();
+            img.rotation = (img.rotation - 90 + 360) % 360;
+            thumbImg.style.transform = `rotate(${img.rotation}deg)`;
+        };
+
+        rotateRight.onclick = (e) => {
+            e.stopPropagation();
+            img.rotation = (img.rotation + 90) % 360;
+            thumbImg.style.transform = `rotate(${img.rotation}deg)`;
         };
 
         attachDragEvents(div);
@@ -176,6 +200,43 @@ window.onload = async function () {
         ui.btnZip.style.opacity = disabled ? 0.5 : 1;
     }
 
+    // === Helper: Rotate Image using Canvas ===
+    const rotateImageData = (base64Data, rotation, originalW, originalH) => {
+        return new Promise((resolve) => {
+            if (rotation === 0) {
+                resolve({ data: base64Data, w: originalW, h: originalH });
+                return;
+            }
+
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                // Swap dimensions for 90° and 270° rotations
+                if (rotation === 90 || rotation === 270) {
+                    canvas.width = originalH;
+                    canvas.height = originalW;
+                } else {
+                    canvas.width = originalW;
+                    canvas.height = originalH;
+                }
+
+                // Move to center, rotate, draw image offset
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate((rotation * Math.PI) / 180);
+                ctx.drawImage(img, -originalW / 2, -originalH / 2);
+
+                resolve({
+                    data: canvas.toDataURL('image/jpeg', 0.92),
+                    w: canvas.width,
+                    h: canvas.height
+                });
+            };
+            img.src = base64Data;
+        });
+    };
+
     // === 7. Toolbar ===
     ui.btnSelectAll.onclick = () => {
         Array.from(ui.grid.children).forEach(c => {
@@ -232,11 +293,18 @@ window.onload = async function () {
             const { jsPDF } = window.jspdf;
 
             // C. Create PDF
-            // Init with first page size
+            // Get first image with rotation applied for initial page size
+            const firstRotated = await rotateImageData(
+                finalImages[0].data,
+                finalImages[0].rotation,
+                finalImages[0].w,
+                finalImages[0].h
+            );
+
             const pdf = new jsPDF({
-                orientation: finalImages[0].w > finalImages[0].h ? 'l' : 'p',
+                orientation: firstRotated.w > firstRotated.h ? 'l' : 'p',
                 unit: 'px',
-                format: [finalImages[0].w, finalImages[0].h]
+                format: [firstRotated.w, firstRotated.h]
             });
 
             for (let i = 0; i < finalImages.length; i++) {
@@ -250,13 +318,16 @@ window.onload = async function () {
                 // Force Repaint
                 await new Promise(r => setTimeout(r, 20));
 
+                // Apply rotation if needed
+                const rotated = await rotateImageData(img.data, img.rotation, img.w, img.h);
+
                 if (i > 0) {
-                    const orientation = img.w > img.h ? 'l' : 'p';
-                    pdf.addPage([img.w, img.h], orientation);
+                    const orientation = rotated.w > rotated.h ? 'l' : 'p';
+                    pdf.addPage([rotated.w, rotated.h], orientation);
                 }
 
                 // CRITICAL: Pass 'null' for format to let jsPDF auto-detect
-                pdf.addImage(img.data, null, 0, 0, img.w, img.h);
+                pdf.addImage(rotated.data, null, 0, 0, rotated.w, rotated.h);
             }
 
             // D. Save
@@ -324,9 +395,12 @@ window.onload = async function () {
                 // Force Repaint
                 await new Promise(r => setTimeout(r, 10));
 
+                // Apply rotation if needed
+                const rotated = await rotateImageData(img.data, img.rotation, img.w, img.h);
+
                 // Convert base64 to binary
-                const base64Data = img.data.split(',')[1];
-                const extension = img.data.includes('image/png') ? 'png' : 'jpg';
+                const base64Data = rotated.data.split(',')[1];
+                const extension = rotated.data.includes('image/png') ? 'png' : 'jpg';
                 const fileName = `image_${String(i + 1).padStart(3, '0')}.${extension}`;
 
                 zip.file(fileName, base64Data, { base64: true });
