@@ -89,7 +89,7 @@
         </div>
 
         <div class="progress-text">
-            Autoscroll active. Please wait for the end of the album.
+            ⚡ Safe Mode: Human-like delays to protect your account.
         </div>
 
         <button id="fb-stop" class="btn-stop">Stop & Create PDF Now</button>
@@ -115,6 +115,23 @@
 
     // === LOGIC ===
     const delay = ms => new Promise(r => setTimeout(r, ms));
+
+    // === RATE LIMITING CONFIG ===
+    // Balanced delays - fast but with some randomness to avoid detection
+    const RATE_LIMIT = {
+        minDelay: 400,           // Minimum delay between photos (ms)
+        maxDelay: 900,           // Maximum delay between photos (ms)
+        pauseEvery: 30,          // Pause after every N photos
+        pauseDuration: 2000,     // How long to pause (ms)
+        pauseJitter: 1500        // Random extra pause time (ms)
+    };
+
+    // Get a random delay within range for human-like behavior
+    const getRandomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+    // Human-like delay with jitter
+    const humanDelay = () => delay(getRandomDelay(RATE_LIMIT.minDelay, RATE_LIMIT.maxDelay));
+
     const seenFbids = new Set();
     const seenImageUrls = new Set(); // Track actual image URLs for duplicate detection
     const capturedImages = [];
@@ -218,6 +235,17 @@
             updateUI("End of album reached", capturedImages.length);
             break;
         }
+
+        // === RATE LIMITING: Periodic pause to look more human ===
+        if (capturedImages.length > 0 && capturedImages.length % RATE_LIMIT.pauseEvery === 0) {
+            const pauseTime = RATE_LIMIT.pauseDuration + getRandomDelay(0, RATE_LIMIT.pauseJitter);
+            updateUI(`Cooling down... (${Math.round(pauseTime / 1000)}s)`, capturedImages.length);
+            await delay(pauseTime);
+        }
+
+        // Human-like delay before clicking next
+        await humanDelay();
+
         nextBtn.click();
 
         // Wait for navigation with timeout
@@ -226,7 +254,7 @@
         const prevImgUrl = imgEl ? normalizeImageUrl(imgEl.src) : null;
 
         for (let i = 0; i < 15; i++) {
-            await delay(300);
+            await delay(400 + getRandomDelay(0, 200));  // Slight randomness in wait time
 
             const newFbid = getCurrentFbid();
             const newImgEl = getActiveImage();
